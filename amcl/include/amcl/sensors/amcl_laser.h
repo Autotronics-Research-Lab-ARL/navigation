@@ -35,12 +35,17 @@
 namespace amcl
 {
 
+/*****************************************Life_Long_Localization*****************************************/
 typedef enum
 {
   LASER_MODEL_BEAM,
   LASER_MODEL_LIKELIHOOD_FIELD,
-  LASER_MODEL_LIKELIHOOD_FIELD_PROB
+  LASER_MODEL_LIKELIHOOD_FIELD_PROB,
+  /*******Laser_Model*******/
+  LASER_MODEL_LIKELIHOOD_FIELD_LLL
+  /*******Laser_Model*******/
 } laser_model_t;
+/*****************************************Life_Long_Localization*****************************************/
 
 // Laser sensor data
 class AMCLLaserData : public AMCLSensorData
@@ -61,6 +66,7 @@ class AMCLLaser : public AMCLSensor
   // Default constructor
   public: AMCLLaser(size_t max_beams, map_t* map);
 
+/*****************************************Life_Long_Localization*****************************************/
   public: virtual ~AMCLLaser(); 
 
   public: void SetModelBeam(double z_hit,
@@ -85,26 +91,42 @@ class AMCLLaser : public AMCLSensor
 					   double beam_skip_distance, 
 					   double beam_skip_threshold, 
 					   double beam_skip_error_threshold);
+  /*******Laser_Model*******/	   
+  public: void SetModelLikelihoodFieldLLL(double z_hit,
+                                       double z_rand,
+                                       double sigma_hit,
+                                       double max_occ_dist);
+  /*******Laser_Model*******/
+  
+/*****************************************Life_Long_Localization*****************************************/
 
   // Update the filter based on the sensor model.  Returns true if the
   // filter has been updated.
-  public: virtual bool UpdateSensor(pf_t *pf, AMCLSensorData *data);
+  /*****************************************Life_Long_Localization_Newlaserscan*****************************************/
+  public: virtual bool UpdateSensor(pf_t *pf, AMCLSensorData *data, AMCLSensorData *data_LLL);
+  /*****************************************Life_Long_Localization_Newlaserscan*****************************************/
 
   // Set the laser's pose after construction
   public: void SetLaserPose(pf_vector_t& laser_pose) 
           {this->laser_pose = laser_pose;}
 
+/*****************************************Life_Long_Localization_Newlaserscan*****************************************/
+/*****************************************Life_Long_Localization*****************************************/
   // Determine the probability for the given pose
-  private: static double BeamModel(AMCLLaserData *data, 
+  private: static double BeamModel(AMCLLaserData *data, AMCLLaserData *data_LLL,
                                    pf_sample_set_t* set);
   // Determine the probability for the given pose
-  private: static double LikelihoodFieldModel(AMCLLaserData *data, 
+  private: static double LikelihoodFieldModel(AMCLLaserData *data,AMCLLaserData *data_LLL,
                                               pf_sample_set_t* set);
-
+  /*******Laser_Model*******/
+  private: static double LikelihoodFieldModel_lll(AMCLLaserData *data, AMCLLaserData *data_LLL,
+                                              pf_sample_set_t* set);
+  /*******Laser_Model*******/
   // Determine the probability for the given pose - more probablistic model 
-  private: static double LikelihoodFieldModelProb(AMCLLaserData *data, 
+  private: static double LikelihoodFieldModelProb(AMCLLaserData *data, AMCLLaserData *data_LLL,
 					     pf_sample_set_t* set);
-
+/*****************************************Life_Long_Localization*****************************************/
+/*****************************************Life_Long_Localization_Newlaserscan*****************************************/
   private: void reallocTempData(int max_samples, int max_obs);
 
   private: laser_model_t model_type;

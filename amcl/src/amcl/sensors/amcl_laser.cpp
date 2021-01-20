@@ -62,7 +62,7 @@ AMCLLaser::~AMCLLaser()
 	delete []temp_obs; 
   }
 }
-
+/*****************************************Life_Long_Localization*****************************************/
 void 
 AMCLLaser::SetModelBeam(double z_hit,
                         double z_short,
@@ -117,31 +117,61 @@ AMCLLaser::SetModelLikelihoodFieldProb(double z_hit,
   map_update_cspace(this->map, max_occ_dist);
 }
 
+/*******Laser_Model*******/
+void 
+AMCLLaser::SetModelLikelihoodFieldLLL(double z_hit,
+                                   double z_rand,
+                                   double sigma_hit,
+                                   double max_occ_dist)
+{
+  this->model_type = LASER_MODEL_LIKELIHOOD_FIELD_LLL;
+  this->z_hit = z_hit;
+  this->z_rand = z_rand;
+  this->sigma_hit = sigma_hit;
+
+  map_update_cspace(this->map, max_occ_dist);
+}
+/*******Laser_Model*******/
+/*****************************************Life_Long_Localization*****************************************/
 
 ////////////////////////////////////////////////////////////////////////////////
 // Apply the laser sensor model
-bool AMCLLaser::UpdateSensor(pf_t *pf, AMCLSensorData *data)
+
+/*****************************************Life_Long_Localization_Newlaserscan*****************************************/
+bool AMCLLaser::UpdateSensor(pf_t *pf, AMCLSensorData *data, AMCLSensorData *data_LLL)
+/*****************************************Life_Long_Localization_Newlaserscan*****************************************/
 {
+
+/*****************************************Life_Long_Localization*****************************************/
+/*****************************************Life_Long_Localization_Newlaserscan*****************************************/
   if (this->max_beams < 2)
     return false;
 
   // Apply the laser sensor model
   if(this->model_type == LASER_MODEL_BEAM)
-    pf_update_sensor(pf, (pf_sensor_model_fn_t) BeamModel, data);
+    pf_update_sensor(pf, (pf_sensor_model_fn_t) BeamModel, data,data_LLL);
   else if(this->model_type == LASER_MODEL_LIKELIHOOD_FIELD)
-    pf_update_sensor(pf, (pf_sensor_model_fn_t) LikelihoodFieldModel, data);  
+    pf_update_sensor(pf, (pf_sensor_model_fn_t) LikelihoodFieldModel, data,data_LLL);  
+    
+  /*******Laser_Model*******/
+  else if(this->model_type == LASER_MODEL_LIKELIHOOD_FIELD_LLL)
+    pf_update_sensor(pf, (pf_sensor_model_fn_t) LikelihoodFieldModel_lll, data,data_LLL); 
+  /*******Laser_Model*******/ 
   else if(this->model_type == LASER_MODEL_LIKELIHOOD_FIELD_PROB)
-    pf_update_sensor(pf, (pf_sensor_model_fn_t) LikelihoodFieldModelProb, data);  
+    pf_update_sensor(pf, (pf_sensor_model_fn_t) LikelihoodFieldModelProb, data,data_LLL);  
   else
-    pf_update_sensor(pf, (pf_sensor_model_fn_t) BeamModel, data);
+    pf_update_sensor(pf, (pf_sensor_model_fn_t) BeamModel, data,data_LLL);
 
   return true;
 }
-
+/*****************************************Life_Long_Localization_Newlaserscan*****************************************/
+/*****************************************Life_Long_Localization*****************************************/
 
 ////////////////////////////////////////////////////////////////////////////////
 // Determine the probability for the given pose
-double AMCLLaser::BeamModel(AMCLLaserData *data, pf_sample_set_t* set)
+
+/*****************************************Life_Long_Localization*****************************************/
+double AMCLLaser::BeamModel(AMCLLaserData *data,AMCLLaserData *data_LLL, pf_sample_set_t* set)
 {
   AMCLLaser *self;
   int i, j, step;
@@ -212,7 +242,8 @@ double AMCLLaser::BeamModel(AMCLLaserData *data, pf_sample_set_t* set)
   return(total_weight);
 }
 
-double AMCLLaser::LikelihoodFieldModel(AMCLLaserData *data, pf_sample_set_t* set)
+
+double AMCLLaser::LikelihoodFieldModel(AMCLLaserData *data,AMCLLaserData *data_LLL, pf_sample_set_t* set)
 {
   AMCLLaser *self;
   int i, j, step;
@@ -302,7 +333,141 @@ double AMCLLaser::LikelihoodFieldModel(AMCLLaserData *data, pf_sample_set_t* set
   return(total_weight);
 }
 
-double AMCLLaser::LikelihoodFieldModelProb(AMCLLaserData *data, pf_sample_set_t* set)
+/*****************************************Life_Long_Localization_Newlaserscan*****************************************/
+/*******Laser_Model*******/
+double AMCLLaser::LikelihoodFieldModel_lll(AMCLLaserData *data,AMCLLaserData *data_LLL, pf_sample_set_t* set)
+{
+  AMCLLaser *self;
+
+  int i, j, step;
+  double z, pz;
+  double p;
+  double obs_range, obs_bearing;
+  double obs_range_LLL, obs_bearing_LLL,dist;
+  double omega_cap;
+  double total_weight;
+  pf_sample_t *sample;
+  pf_vector_t pose;
+  pf_vector_t hit;
+  pf_vector_t map_LLL;
+
+  self = (AMCLLaser*) data->sensor;
+
+
+  total_weight = 0.0;
+
+  // Compute the sample weights
+  for (j = 0; j < set->sample_count; j++)
+  {
+    sample = set->samples + j;
+    pose = sample->pose;
+
+    // Take account of the laser pose relative to the robot
+    pose = pf_vector_coord_add(self->laser_pose, pose);
+
+    p = 1.0;
+
+    // Pre-compute a couple of things
+    double z_hit_denom = 2 * self->sigma_hit * self->sigma_hit;
+    double z_rand_mult = 1.0/data->range_max;
+
+    step = (data->range_count - 1) / (self->max_beams - 1);
+
+    // Step size must be at least 1
+    if(step < 1)
+      step = 1;
+
+    for (i = 0; i < data->range_count; i += step)
+    {
+      obs_range = data->ranges[i][0];
+      obs_bearing = data->ranges[i][1];
+      
+      
+  
+
+      // This model ignores max range readings
+      if(obs_range >= data->range_max)
+        continue;
+
+      // Check for NaN
+      if(obs_range != obs_range)
+        continue;
+
+      pz = 0.0;
+
+      // Compute the endpoint of the beam
+      hit.v[0] = pose.v[0] + obs_range * cos(pose.v[2] + obs_bearing);
+      hit.v[1] = pose.v[1] + obs_range * sin(pose.v[2] + obs_bearing);
+      
+      dist=data_LLL->range_max;
+    for (int i_LLL = 0; i_LLL < data_LLL->range_count; i_LLL ++)
+    {
+    
+    if(isfinite(data_LLL->ranges[i][0]))
+    {
+      obs_range_LLL = data_LLL->ranges[i][0];
+      obs_bearing_LLL = data_LLL->ranges[i][1];
+      
+      map_LLL.v[0] = pose.v[0] + obs_range_LLL * cos(pose.v[2] + obs_bearing_LLL);
+      map_LLL.v[1] = pose.v[1] + obs_range_LLL * sin(pose.v[2] + obs_bearing_LLL);
+      
+      double a_LLL=map_LLL.v[0]-hit.v[0];
+      double b_LLL=map_LLL.v[1]-hit.v[1];
+      
+      
+      if(dist>=sqrt(a_LLL*a_LLL+b_LLL*b_LLL))
+      {
+      dist=sqrt(a_LLL*a_LLL+b_LLL*b_LLL);
+      }
+    }
+    
+    }
+      // Convert to map grid coords.
+      int mi, mj;
+      mi = MAP_GXWX(self->map, hit.v[0]);
+      mj = MAP_GYWY(self->map, hit.v[1]);
+      
+      // Part 1: Get distance from the hit to closest obstacle.
+      // Off-map penalized as max distance
+      if(!MAP_VALID(self->map, mi, mj))
+        z = self->map->max_occ_dist;
+      else
+        z = self->map->cells[MAP_INDEX(self->map,mi,mj)].occ_dist;
+      // Gaussian model
+      // NOTE: this should have a normalization of 1/(sqrt(2pi)*sigma)
+      
+      if(z>=dist){
+      pz += self->z_hit * exp(-(dist * dist) / z_hit_denom);
+      }
+      else
+      {
+      pz += self->z_hit * exp(-(z * z) / z_hit_denom);
+      }
+      
+      // Part 2: random measurements
+      pz += self->z_rand * z_rand_mult;
+
+      // TODO: outlier rejection for short readings
+
+      assert(pz <= 1.0);
+      assert(pz >= 0.0);
+      //      p *= pz;
+      // here we have an ad-hoc weighting scheme for combining beam probs
+      // works well, though...
+      p += pz*pz*pz;
+    }
+
+    sample->weight *= p;
+    total_weight += sample->weight;
+  }
+
+  return(total_weight);
+}
+/*****************************************Life_Long_Localization_Newlaserscan*****************************************/
+/*******Laser_Model*******/
+
+
+double AMCLLaser::LikelihoodFieldModelProb(AMCLLaserData *data,AMCLLaserData *data_LLL, pf_sample_set_t* set)
 {
   AMCLLaser *self;
   int i, j, step;
@@ -492,6 +657,7 @@ double AMCLLaser::LikelihoodFieldModelProb(AMCLLaserData *data, pf_sample_set_t*
   delete [] obs_mask;
   return(total_weight);
 }
+/*****************************************Life_Long_Localization*****************************************/
 
 void AMCLLaser::reallocTempData(int new_max_samples, int new_max_obs){
   if(temp_obs){

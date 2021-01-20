@@ -35,13 +35,18 @@
 namespace amcl
 {
 
+/*****************************************Life_Long_Localization*****************************************/
 typedef enum
 {
   ODOM_MODEL_DIFF,
   ODOM_MODEL_OMNI,
   ODOM_MODEL_DIFF_CORRECTED,
-  ODOM_MODEL_OMNI_CORRECTED
+  ODOM_MODEL_OMNI_CORRECTED,
+  /*******Odometery_Model*******/
+  ODOM_MODEL_DIFF_LLL
+  /*******Odometery_Model*******/
 } odom_model_t;
+/*****************************************Life_Long_Localization*****************************************/
 
 // Odometric sensor data
 class AMCLOdomData : public AMCLSensorData
@@ -60,11 +65,18 @@ class AMCLOdom : public AMCLSensor
   // Default constructor
   public: AMCLOdom();
 
+/*****************************************Life_Long_Localization*****************************************/
   public: void SetModelDiff(double alpha1, 
                             double alpha2, 
                             double alpha3, 
                             double alpha4);
-
+  /*******Odometery_Model*******/
+  public: void SetModelDiffLLL(double alpha1, 
+                            double alpha2, 
+                            double alpha3, 
+                            double alpha4);
+  /*******Odometery_Model*******/                          
+                            
   public: void SetModelOmni(double alpha1, 
                             double alpha2, 
                             double alpha3, 
@@ -77,6 +89,7 @@ class AMCLOdom : public AMCLSensor
                          double alpha3,
                          double alpha4,
                          double alpha5 = 0 );
+/*****************************************Life_Long_Localization*****************************************/
 
   // Update the filter based on the action model.  Returns true if the filter
   // has been updated.

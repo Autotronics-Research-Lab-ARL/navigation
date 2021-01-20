@@ -117,6 +117,10 @@ angle_diff(double a, double b)
 
 static const std::string scan_topic_ = "scan";
 
+/*****************************************Life_Long_Localization_Newlaserscan*****************************************/
+static const std::string scan_topic_LLL_ = "scan_LLL";
+/*****************************************Life_Long_Localization_Newlaserscan*****************************************/
+
 /* This function is only useful to have the whole code work
  * with old rosbags that have trailing slashes for their frames
  */
@@ -172,6 +176,7 @@ class AmclNode
 
     void laserReceived(const sensor_msgs::LaserScanConstPtr& laser_scan);
     void initialPoseReceived(const geometry_msgs::PoseWithCovarianceStampedConstPtr& msg);
+    void YoloMeasurments(const sensor_msgs::LaserScanConstPtr& msg);
     void handleInitialPoseMessage(const geometry_msgs::PoseWithCovarianceStamped& msg);
     void mapReceived(const nav_msgs::OccupancyGridConstPtr& msg);
 
@@ -193,12 +198,16 @@ class AmclNode
 
     bool use_map_topic_;
     bool first_map_only_;
-
+    
     ros::Duration gui_publish_period;
     ros::Time save_pose_last_time;
     ros::Duration save_pose_period;
 
     geometry_msgs::PoseWithCovarianceStamped last_published_pose;
+    
+/*****************************************Life_Long_Localization_Newlaserscan*****************************************/
+    sensor_msgs::LaserScan laser_scan_LLL;
+/*****************************************Life_Long_Localization_Newlaserscan*****************************************/
 
     map_t* map_;
     char* mapdata;
@@ -208,6 +217,11 @@ class AmclNode
     message_filters::Subscriber<sensor_msgs::LaserScan>* laser_scan_sub_;
     tf2_ros::MessageFilter<sensor_msgs::LaserScan>* laser_scan_filter_;
     ros::Subscriber initial_pose_sub_;
+    
+/*****************************************Life_Long_Localization_Newlaserscan*****************************************/
+    ros::Subscriber laser_scan_sub_LLL_;
+/*****************************************Life_Long_Localization_Newlaserscan*****************************************/
+    
     std::vector< AMCLLaser* > lasers_;
     std::vector< bool > lasers_update_;
     std::map< std::string, int > frame_to_laser_;
@@ -402,6 +416,8 @@ AmclNode::AmclNode() :
   private_nh_.param("laser_lambda_short", lambda_short_, 0.1);
   private_nh_.param("laser_likelihood_max_dist", laser_likelihood_max_dist_, 2.0);
   std::string tmp_model_type;
+  
+/*****************************************Life_Long_Localization*****************************************/
   private_nh_.param("laser_model_type", tmp_model_type, std::string("likelihood_field"));
   if(tmp_model_type == "beam")
     laser_model_type_ = LASER_MODEL_BEAM;
@@ -410,13 +426,20 @@ AmclNode::AmclNode() :
   else if(tmp_model_type == "likelihood_field_prob"){
     laser_model_type_ = LASER_MODEL_LIKELIHOOD_FIELD_PROB;
   }
+  /*******Laser_Model*******/
+  else if(tmp_model_type == "likelihood_field_lll"){
+    laser_model_type_ = LASER_MODEL_LIKELIHOOD_FIELD_LLL;
+  }
+  /*******Laser_Model*******/
   else
   {
     ROS_WARN("Unknown laser model type \"%s\"; defaulting to likelihood_field model",
              tmp_model_type.c_str());
     laser_model_type_ = LASER_MODEL_LIKELIHOOD_FIELD;
   }
+/*****************************************Life_Long_Localization*****************************************/
 
+/*****************************************Life_Long_Localization*****************************************/
   private_nh_.param("odom_model_type", tmp_model_type, std::string("diff"));
   if(tmp_model_type == "diff")
     odom_model_type_ = ODOM_MODEL_DIFF;
@@ -425,13 +448,18 @@ AmclNode::AmclNode() :
   else if(tmp_model_type == "diff-corrected")
     odom_model_type_ = ODOM_MODEL_DIFF_CORRECTED;
   else if(tmp_model_type == "omni-corrected")
-    odom_model_type_ = ODOM_MODEL_OMNI_CORRECTED;
+    odom_model_type_ = ODOM_MODEL_OMNI_CORRECTED;  
+  /*******Odometery_Model*******/
+  else if(tmp_model_type == "diff_lll")
+    odom_model_type_ = ODOM_MODEL_DIFF_LLL;
+  /*******Odometery_Model*******/
   else
   {
     ROS_WARN("Unknown odom model type \"%s\"; defaulting to diff model",
              tmp_model_type.c_str());
     odom_model_type_ = ODOM_MODEL_DIFF;
   }
+/*****************************************Life_Long_Localization*****************************************/
 
   private_nh_.param("update_min_d", d_thresh_, 0.2);
   private_nh_.param("update_min_a", a_thresh_, M_PI/6.0);
@@ -488,7 +516,12 @@ AmclNode::AmclNode() :
   laser_scan_filter_->registerCallback(boost::bind(&AmclNode::laserReceived,
                                                    this, _1));
   initial_pose_sub_ = nh_.subscribe("initialpose", 2, &AmclNode::initialPoseReceived, this);
-
+  
+/*****************************************Life_Long_Localization_Newlaserscan*****************************************/
+  laser_scan_sub_LLL_ = nh_.subscribe(scan_topic_LLL_, 1, &AmclNode::YoloMeasurments, this);
+/*****************************************Life_Long_Localization_Newlaserscan*****************************************/
+  
+  
   if(use_map_topic_) {
     map_sub_ = nh_.subscribe("map", 1, &AmclNode::mapReceived, this);
     ROS_INFO("Subscribed to map topic.");
@@ -556,14 +589,21 @@ void AmclNode::reconfigureCB(AMCLConfig &config, uint32_t level)
   sigma_hit_ = config.laser_sigma_hit;
   lambda_short_ = config.laser_lambda_short;
   laser_likelihood_max_dist_ = config.laser_likelihood_max_dist;
-
+  
+/*****************************************Life_Long_Localization*****************************************/
   if(config.laser_model_type == "beam")
     laser_model_type_ = LASER_MODEL_BEAM;
   else if(config.laser_model_type == "likelihood_field")
     laser_model_type_ = LASER_MODEL_LIKELIHOOD_FIELD;
   else if(config.laser_model_type == "likelihood_field_prob")
     laser_model_type_ = LASER_MODEL_LIKELIHOOD_FIELD_PROB;
+  /*******Laser_Model*******/
+  else if(config.laser_model_type == "likelihood_field_lll")
+    laser_model_type_ = LASER_MODEL_LIKELIHOOD_FIELD_LLL;
+  /*******Laser_Model*******/  
+/*****************************************Life_Long_Localization*****************************************/
 
+/*****************************************Life_Long_Localization*****************************************/
   if(config.odom_model_type == "diff")
     odom_model_type_ = ODOM_MODEL_DIFF;
   else if(config.odom_model_type == "omni")
@@ -572,7 +612,9 @@ void AmclNode::reconfigureCB(AMCLConfig &config, uint32_t level)
     odom_model_type_ = ODOM_MODEL_DIFF_CORRECTED;
   else if(config.odom_model_type == "omni-corrected")
     odom_model_type_ = ODOM_MODEL_OMNI_CORRECTED;
-
+  else if(config.odom_model_type == "diff_lll")
+    odom_model_type_ = ODOM_MODEL_DIFF_LLL;
+/*****************************************Life_Long_Localization*****************************************/
   if(config.min_particles > config.max_particles)
   {
     ROS_WARN("You've set min_particles to be greater than max particles, this isn't allowed so they'll be set to be equal.");
@@ -631,6 +673,8 @@ void AmclNode::reconfigureCB(AMCLConfig &config, uint32_t level)
   delete laser_;
   laser_ = new AMCLLaser(max_beams_, map_);
   ROS_ASSERT(laser_);
+  
+/*****************************************Life_Long_Localization*****************************************/
   if(laser_model_type_ == LASER_MODEL_BEAM)
     laser_->SetModelBeam(z_hit_, z_short_, z_max_, z_rand_,
                          sigma_hit_, lambda_short_, 0.0);
@@ -648,7 +692,15 @@ void AmclNode::reconfigureCB(AMCLConfig &config, uint32_t level)
                                     laser_likelihood_max_dist_);
     ROS_INFO("Done initializing likelihood field model.");
   }
-
+  /*******Laser_Model*******/
+   else if(laser_model_type_ == LASER_MODEL_LIKELIHOOD_FIELD_LLL){
+    ROS_INFO("Initializing likelihood field model lll; this can take some time on large maps...");
+    laser_->SetModelLikelihoodFieldLLL(z_hit_, z_rand_, sigma_hit_,
+                                    laser_likelihood_max_dist_);
+    ROS_INFO("Done initializing likelihood field model lll.");
+  }
+  /*******Laser_Model*******/
+/*****************************************Life_Long_Localization*****************************************/
   odom_frame_id_ = stripSlash(config.odom_frame_id);
   base_frame_id_ = stripSlash(config.base_frame_id);
   global_frame_id_ = stripSlash(config.global_frame_id);
@@ -664,6 +716,11 @@ void AmclNode::reconfigureCB(AMCLConfig &config, uint32_t level)
                                                    this, _1));
 
   initial_pose_sub_ = nh_.subscribe("initialpose", 2, &AmclNode::initialPoseReceived, this);
+  
+/*****************************************Life_Long_Localization_Newlaserscan*****************************************/
+  laser_scan_sub_LLL_ = nh_.subscribe(scan_topic_LLL_, 1, &AmclNode::YoloMeasurments, this);
+/*****************************************Life_Long_Localization_Newlaserscan*****************************************/
+  
 }
 
 
@@ -932,6 +989,7 @@ AmclNode::handleMapMessage(const nav_msgs::OccupancyGrid& msg)
   delete laser_;
   laser_ = new AMCLLaser(max_beams_, map_);
   ROS_ASSERT(laser_);
+/*****************************************Life_Long_Localization*****************************************/
   if(laser_model_type_ == LASER_MODEL_BEAM)
     laser_->SetModelBeam(z_hit_, z_short_, z_max_, z_rand_,
                          sigma_hit_, lambda_short_, 0.0);
@@ -943,14 +1001,24 @@ AmclNode::handleMapMessage(const nav_msgs::OccupancyGrid& msg)
 					beam_skip_threshold_, beam_skip_error_threshold_);
     ROS_INFO("Done initializing likelihood field model.");
   }
-  else
+  else if(laser_model_type_ == LASER_MODEL_LIKELIHOOD_FIELD)
   {
     ROS_INFO("Initializing likelihood field model; this can take some time on large maps...");
     laser_->SetModelLikelihoodField(z_hit_, z_rand_, sigma_hit_,
                                     laser_likelihood_max_dist_);
     ROS_INFO("Done initializing likelihood field model.");
   }
-
+  
+  /*******Laser_Model*******/
+  else
+  {
+    ROS_INFO("Initializing likelihood field model lll; this can take some time on large maps...");
+    laser_->SetModelLikelihoodFieldLLL(z_hit_, z_rand_, sigma_hit_,
+                                    laser_likelihood_max_dist_);
+    ROS_INFO("Done initializing likelihood field model lll.");
+  }
+  /*******Laser_Model*******/
+/*****************************************Life_Long_Localization*****************************************/
   // In case the initial pose message arrived before the first map,
   // try to apply the initial pose now that the map has arrived.
   applyInitialPose();
@@ -1247,7 +1315,14 @@ AmclNode::laserReceived(const sensor_msgs::LaserScanConstPtr& laser_scan)
     AMCLLaserData ldata;
     ldata.sensor = lasers_[laser_index];
     ldata.range_count = laser_scan->ranges.size();
-
+    
+/*****************************************Life_Long_Localization_Newlaserscan*****************************************/
+    AMCLLaserData l_llldata;
+    l_llldata.sensor = lasers_[laser_index];
+    l_llldata.range_count = laser_scan_LLL.ranges.size();
+/*****************************************Life_Long_Localization_Newlaserscan*****************************************/
+    
+    
     // To account for lasers that are mounted upside-down, we determine the
     // min, max, and increment angles of the laser in the base frame.
     //
@@ -1282,19 +1357,50 @@ AmclNode::laserReceived(const sensor_msgs::LaserScanConstPtr& laser_scan)
 
     ROS_DEBUG("Laser %d angles in base frame: min: %.3f inc: %.3f", laser_index, angle_min, angle_increment);
 
+/*****************************************Life_Long_Localization_Newlaserscan*****************************************/
     // Apply range min/max thresholds, if the user supplied them
-    if(laser_max_range_ > 0.0)
+    if(laser_max_range_ > 0.0){
       ldata.range_max = std::min(laser_scan->range_max, (float)laser_max_range_);
-    else
+      l_llldata.range_max = std::min(laser_scan_LLL.range_max, (float)laser_max_range_);
+      }
+    else{
       ldata.range_max = laser_scan->range_max;
+      l_llldata.range_max = laser_scan_LLL.range_max;
+      } 
+/*****************************************Life_Long_Localization_Newlaserscan*****************************************/
+    
+/*****************************************Life_Long_Localization_Newlaserscan*****************************************/
     double range_min;
+    double range_min_LLL;
+/*****************************************Life_Long_Localization_Newlaserscan*****************************************/
+    
+    
     if(laser_min_range_ > 0.0)
       range_min = std::max(laser_scan->range_min, (float)laser_min_range_);
     else
       range_min = laser_scan->range_min;
+     
+/*****************************************Life_Long_Localization_Newlaserscan*****************************************/
+    if(laser_min_range_ > 0.0)
+      range_min_LLL = std::max(laser_scan_LLL.range_min, (float)laser_min_range_);
+    else
+      range_min_LLL = laser_scan_LLL.range_min;  
+/*****************************************Life_Long_Localization_Newlaserscan*****************************************/
+    
+      
     // The AMCLLaserData destructor will free this memory
     ldata.ranges = new double[ldata.range_count][2];
+    
+/*****************************************Life_Long_Localization_Newlaserscan*****************************************/
+    l_llldata.ranges = new double[l_llldata.range_count][2];
+/*****************************************Life_Long_Localization_Newlaserscan*****************************************/
+        
     ROS_ASSERT(ldata.ranges);
+    
+/*****************************************Life_Long_Localization_Newlaserscan*****************************************/
+    ROS_ASSERT(l_llldata.ranges);
+/*****************************************Life_Long_Localization_Newlaserscan*****************************************/
+    
     for(int i=0;i<ldata.range_count;i++)
     {
       // amcl doesn't (yet) have a concept of min range.  So we'll map short
@@ -1307,8 +1413,25 @@ AmclNode::laserReceived(const sensor_msgs::LaserScanConstPtr& laser_scan)
       ldata.ranges[i][1] = angle_min +
               (i * angle_increment);
     }
-
-    lasers_[laser_index]->UpdateSensor(pf_, (AMCLSensorData*)&ldata);
+    
+/*****************************************Life_Long_Localization_Newlaserscan*****************************************/
+      for(int i=0;i<l_llldata.range_count;i++)
+    {
+      // amcl doesn't (yet) have a concept of min range.  So we'll map short
+      // readings to max range.
+      if(laser_scan_LLL.ranges[i] <= range_min_LLL)
+        l_llldata.ranges[i][0] = l_llldata.range_max;
+      else
+        l_llldata.ranges[i][0] = laser_scan_LLL.ranges[i];
+      // Compute bearing
+      l_llldata.ranges[i][1] = angle_min +
+              (i * angle_increment);
+    }
+/*****************************************Life_Long_Localization_Newlaserscan*****************************************/
+    
+/*****************************************Life_Long_Localization_Newlaserscan*****************************************/
+    lasers_[laser_index]->UpdateSensor(pf_, (AMCLSensorData*)&ldata, (AMCLSensorData*)&l_llldata);
+/*****************************************Life_Long_Localization_Newlaserscan*****************************************/
 
     lasers_update_[laser_index] = false;
 
@@ -1516,6 +1639,22 @@ AmclNode::initialPoseReceived(const geometry_msgs::PoseWithCovarianceStampedCons
   handleInitialPoseMessage(*msg);
 }
 
+/*****************************************Life_Long_Localization*****************************************/
+void
+AmclNode::YoloMeasurments(const sensor_msgs::LaserScanConstPtr& msg)
+{
+ laser_scan_LLL.header =msg->header;
+ laser_scan_LLL.angle_min  =msg->angle_min;
+ laser_scan_LLL.angle_max  =msg->angle_max;
+ laser_scan_LLL.angle_increment  =msg->angle_increment;
+ laser_scan_LLL.time_increment  =msg->time_increment;
+ laser_scan_LLL.scan_time  =msg->scan_time;
+ laser_scan_LLL.range_min  =msg->range_min;
+ laser_scan_LLL.range_max  =msg->range_max;
+ laser_scan_LLL.ranges  =msg->ranges;
+ laser_scan_LLL.intensities  =msg->intensities;
+}
+/*****************************************Life_Long_Localization*****************************************/
 void
 AmclNode::handleInitialPoseMessage(const geometry_msgs::PoseWithCovarianceStamped& msg)
 {

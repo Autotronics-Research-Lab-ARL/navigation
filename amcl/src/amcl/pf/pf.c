@@ -265,7 +265,9 @@ void pf_update_action(pf_t *pf, pf_action_model_fn_t action_fn, void *action_dat
 
 #include <float.h>
 // Update the filter with some new sensor observation
-void pf_update_sensor(pf_t *pf, pf_sensor_model_fn_t sensor_fn, void *sensor_data)
+
+/*****************************************Life_Long_Localization_Newlaserscan*****************************************/
+void pf_update_sensor(pf_t *pf, pf_sensor_model_fn_t sensor_fn, void *sensor_data, void *sensor_data_LLL)
 {
   int i;
   pf_sample_set_t *set;
@@ -275,7 +277,7 @@ void pf_update_sensor(pf_t *pf, pf_sensor_model_fn_t sensor_fn, void *sensor_dat
   set = pf->sets + pf->current_set;
 
   // Compute the sample weights
-  total = (*sensor_fn) (sensor_data, set);
+  total = (*sensor_fn) (sensor_data,sensor_data_LLL, set);
 
   set->n_effective = 0;
   
@@ -316,7 +318,7 @@ void pf_update_sensor(pf_t *pf, pf_sensor_model_fn_t sensor_fn, void *sensor_dat
   set->n_effective = 1.0/set->n_effective;
   return;
 }
-
+/*****************************************Life_Long_Localization_Newlaserscan*****************************************/
 // copy set a to set b
 void copy_set(pf_sample_set_t* set_a, pf_sample_set_t* set_b)
 {
