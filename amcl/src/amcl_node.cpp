@@ -207,6 +207,8 @@ class AmclNode
     
 /*****************************************Life_Long_Localization_Newlaserscan*****************************************/
     sensor_msgs::LaserScan laser_scan_LLL;
+    
+   
 /*****************************************Life_Long_Localization_Newlaserscan*****************************************/
 
     map_t* map_;
@@ -1185,7 +1187,12 @@ AmclNode::setMapCallback(nav_msgs::SetMap::Request& req,
 
 void
 AmclNode::laserReceived(const sensor_msgs::LaserScanConstPtr& laser_scan)
-{
+{ 	
+
+	 double omega_odom[max_particles_];
+   	 double *omega_odom_ptr=&omega_odom[0];
+   	 
+   	 
   std::string laser_scan_frame_id = stripSlash(laser_scan->header.frame_id);
   last_laser_received_ts_ = ros::Time::now();
   if( map_ == NULL ) {
@@ -1302,10 +1309,11 @@ AmclNode::laserReceived(const sensor_msgs::LaserScanConstPtr& laser_scan)
     odata.delta = delta;
 
     // Use the action data to update the filter
-    odom_->UpdateAction(pf_, (AMCLSensorData*)&odata);
+    odom_->UpdateAction(pf_, (AMCLSensorData*)&odata, omega_odom_ptr);
 
     // Pose at last filter update
     //this->pf_odom_pose = pose;
+    
   }
 
   bool resampled = false;
@@ -1430,7 +1438,7 @@ AmclNode::laserReceived(const sensor_msgs::LaserScanConstPtr& laser_scan)
 /*****************************************Life_Long_Localization_Newlaserscan*****************************************/
     
 /*****************************************Life_Long_Localization_Newlaserscan*****************************************/
-    lasers_[laser_index]->UpdateSensor(pf_, (AMCLSensorData*)&ldata, (AMCLSensorData*)&l_llldata);
+    lasers_[laser_index]->UpdateSensor(pf_, (AMCLSensorData*)&ldata, (AMCLSensorData*)&l_llldata, omega_odom);
 /*****************************************Life_Long_Localization_Newlaserscan*****************************************/
 
     lasers_update_[laser_index] = false;

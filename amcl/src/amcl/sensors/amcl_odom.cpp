@@ -128,7 +128,7 @@ AMCLOdom::SetModel( odom_model_t type,
 
 /*****************************************Life_Long_Localization*****************************************/
 // Apply the action model
-bool AMCLOdom::UpdateAction(pf_t *pf, AMCLSensorData *data)
+bool AMCLOdom::UpdateAction(pf_t *pf, AMCLSensorData *data, double *omega_odom_ptr)
 {
   AMCLOdomData *ndata;
   ndata = (AMCLOdomData*) data;
@@ -240,7 +240,7 @@ bool AMCLOdom::UpdateAction(pf_t *pf, AMCLSensorData *data)
     double delta_rot1_hat, delta_trans_hat, delta_rot2_hat;
     double delta_rot1_noise, delta_rot2_noise;
     /*****Odometery_Model_DEV*******/
-    double a1,b1,a2,b2,a3,b3;
+    double a1,b1,P1,a2,b2,P2,a3,b3,P3;
     /*****Odometery_Model_DEV*******/
     
     // Avoid computing a bearing from two poses that are extremely near each
@@ -289,14 +289,19 @@ bool AMCLOdom::UpdateAction(pf_t *pf, AMCLSensorData *data)
       /*****Odometery_Model_DEV*******/
       a1=delta_rot1-delta_rot1_hat;
       b1=alpha1*delta_rot1_hat + alpha2*delta_trans_hat;
+      P1=(1/sqrt(2*M_PI*b1)) * exp(-(0.5*(a1*a1))/ b1);
+      
       
       a2=delta_trans-delta_trans_hat;
       b2=alpha3*delta_trans_hat + alpha4*(delta_rot1_hat+delta_rot2_hat);
+      P2=(1/sqrt(2*M_PI*b2)) * exp(-(0.5*(a2*a2))/ b2);
       
       a3=delta_rot2-delta_rot2_hat;
       b3=alpha1*delta_rot2_hat+alpha2*delta_trans_hat;
+      P3=(1/sqrt(2*M_PI*b3)) * exp(-(0.5*(a3*a3))/ b3);
       /*****Odometery_Model_DEV*******/
       
+      *(omega_odom_ptr+i)=P1*P2*P3;
     }
     
     

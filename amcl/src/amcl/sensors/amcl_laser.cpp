@@ -138,7 +138,7 @@ AMCLLaser::SetModelLikelihoodFieldLLL(double z_hit,
 // Apply the laser sensor model
 
 /*****************************************Life_Long_Localization_Newlaserscan*****************************************/
-bool AMCLLaser::UpdateSensor(pf_t *pf, AMCLSensorData *data, AMCLSensorData *data_LLL)
+bool AMCLLaser::UpdateSensor(pf_t *pf, AMCLSensorData *data, AMCLSensorData *data_LLL, double omega_odom[])
 /*****************************************Life_Long_Localization_Newlaserscan*****************************************/
 {
 
@@ -149,18 +149,18 @@ bool AMCLLaser::UpdateSensor(pf_t *pf, AMCLSensorData *data, AMCLSensorData *dat
 
   // Apply the laser sensor model
   if(this->model_type == LASER_MODEL_BEAM)
-    pf_update_sensor(pf, (pf_sensor_model_fn_t) BeamModel, data,data_LLL);
+    pf_update_sensor(pf, (pf_sensor_model_fn_t) BeamModel, data,data_LLL, omega_odom);
   else if(this->model_type == LASER_MODEL_LIKELIHOOD_FIELD)
-    pf_update_sensor(pf, (pf_sensor_model_fn_t) LikelihoodFieldModel, data,data_LLL);  
+    pf_update_sensor(pf, (pf_sensor_model_fn_t) LikelihoodFieldModel, data,data_LLL,omega_odom);  
     
   /*******Laser_Model*******/
   else if(this->model_type == LASER_MODEL_LIKELIHOOD_FIELD_LLL)
-    pf_update_sensor(pf, (pf_sensor_model_fn_t) LikelihoodFieldModel_lll, data,data_LLL); 
+    pf_update_sensor(pf, (pf_sensor_model_fn_t) LikelihoodFieldModel_lll, data,data_LLL,omega_odom); 
   /*******Laser_Model*******/ 
   else if(this->model_type == LASER_MODEL_LIKELIHOOD_FIELD_PROB)
-    pf_update_sensor(pf, (pf_sensor_model_fn_t) LikelihoodFieldModelProb, data,data_LLL);  
+    pf_update_sensor(pf, (pf_sensor_model_fn_t) LikelihoodFieldModelProb, data,data_LLL,omega_odom);  
   else
-    pf_update_sensor(pf, (pf_sensor_model_fn_t) BeamModel, data,data_LLL);
+    pf_update_sensor(pf, (pf_sensor_model_fn_t) BeamModel, data,data_LLL,omega_odom);
 
   return true;
 }
@@ -171,7 +171,7 @@ bool AMCLLaser::UpdateSensor(pf_t *pf, AMCLSensorData *data, AMCLSensorData *dat
 // Determine the probability for the given pose
 
 /*****************************************Life_Long_Localization*****************************************/
-double AMCLLaser::BeamModel(AMCLLaserData *data,AMCLLaserData *data_LLL, pf_sample_set_t* set)
+double AMCLLaser::BeamModel(AMCLLaserData *data,AMCLLaserData *data_LLL, pf_sample_set_t* set,double omega_odom[])
 {
   AMCLLaser *self;
   int i, j, step;
@@ -243,7 +243,7 @@ double AMCLLaser::BeamModel(AMCLLaserData *data,AMCLLaserData *data_LLL, pf_samp
 }
 
 
-double AMCLLaser::LikelihoodFieldModel(AMCLLaserData *data,AMCLLaserData *data_LLL, pf_sample_set_t* set)
+double AMCLLaser::LikelihoodFieldModel(AMCLLaserData *data,AMCLLaserData *data_LLL, pf_sample_set_t* set,double omega_odom[])
 {
   AMCLLaser *self;
   int i, j, step;
@@ -335,7 +335,7 @@ double AMCLLaser::LikelihoodFieldModel(AMCLLaserData *data,AMCLLaserData *data_L
 
 /*****************************************Life_Long_Localization_Newlaserscan*****************************************/
 /*******Laser_Model*******/
-double AMCLLaser::LikelihoodFieldModel_lll(AMCLLaserData *data,AMCLLaserData *data_LLL, pf_sample_set_t* set)
+double AMCLLaser::LikelihoodFieldModel_lll(AMCLLaserData *data,AMCLLaserData *data_LLL, pf_sample_set_t* set,double omega_odom[])
 {
   AMCLLaser *self;
 
@@ -344,7 +344,6 @@ double AMCLLaser::LikelihoodFieldModel_lll(AMCLLaserData *data,AMCLLaserData *da
   double p;
   double obs_range, obs_bearing;
   double obs_range_LLL, obs_bearing_LLL,dist;
-  double omega_cap;
   double total_weight;
   pf_sample_t *sample;
   pf_vector_t pose;
@@ -361,6 +360,8 @@ double AMCLLaser::LikelihoodFieldModel_lll(AMCLLaserData *data,AMCLLaserData *da
   {
     sample = set->samples + j;
     pose = sample->pose;
+    
+    double omega_cap=omega_odom[j]*sample->weight;
 
     // Take account of the laser pose relative to the robot
     pose = pf_vector_coord_add(self->laser_pose, pose);
@@ -408,8 +409,8 @@ double AMCLLaser::LikelihoodFieldModel_lll(AMCLLaserData *data,AMCLLaserData *da
       obs_range_LLL = data_LLL->ranges[i][0];
       obs_bearing_LLL = data_LLL->ranges[i][1];
       
-      map_LLL.v[0] = pose.v[0] + obs_range_LLL * cos(pose.v[2] + obs_bearing_LLL);
-      map_LLL.v[1] = pose.v[1] + obs_range_LLL * sin(pose.v[2] + obs_bearing_LLL);
+      map_LLL.v[0] = pose.v[0] + (1/omega_cap)*(obs_range_LLL * cos(pose.v[2] + obs_bearing_LLL));
+      map_LLL.v[1] = pose.v[1] + (1/omega_cap)*(obs_range_LLL * sin(pose.v[2] + obs_bearing_LLL));
       
       double a_LLL=map_LLL.v[0]-hit.v[0];
       double b_LLL=map_LLL.v[1]-hit.v[1];
@@ -467,7 +468,7 @@ double AMCLLaser::LikelihoodFieldModel_lll(AMCLLaserData *data,AMCLLaserData *da
 /*******Laser_Model*******/
 
 
-double AMCLLaser::LikelihoodFieldModelProb(AMCLLaserData *data,AMCLLaserData *data_LLL, pf_sample_set_t* set)
+double AMCLLaser::LikelihoodFieldModelProb(AMCLLaserData *data,AMCLLaserData *data_LLL, pf_sample_set_t* set,double omega_odom[])
 {
   AMCLLaser *self;
   int i, j, step;

@@ -103,7 +103,7 @@ class AMCLLaser : public AMCLSensor
   // Update the filter based on the sensor model.  Returns true if the
   // filter has been updated.
   /*****************************************Life_Long_Localization_Newlaserscan*****************************************/
-  public: virtual bool UpdateSensor(pf_t *pf, AMCLSensorData *data, AMCLSensorData *data_LLL);
+  public: virtual bool UpdateSensor(pf_t *pf, AMCLSensorData *data, AMCLSensorData *data_LLL, double omega_odom[]);
   /*****************************************Life_Long_Localization_Newlaserscan*****************************************/
 
   // Set the laser's pose after construction
@@ -114,17 +114,17 @@ class AMCLLaser : public AMCLSensor
 /*****************************************Life_Long_Localization*****************************************/
   // Determine the probability for the given pose
   private: static double BeamModel(AMCLLaserData *data, AMCLLaserData *data_LLL,
-                                   pf_sample_set_t* set);
+                                   pf_sample_set_t* set,double omega_odom[]);
   // Determine the probability for the given pose
   private: static double LikelihoodFieldModel(AMCLLaserData *data,AMCLLaserData *data_LLL,
-                                              pf_sample_set_t* set);
+                                              pf_sample_set_t* set,double omega_odom[]);
   /*******Laser_Model*******/
   private: static double LikelihoodFieldModel_lll(AMCLLaserData *data, AMCLLaserData *data_LLL,
-                                              pf_sample_set_t* set);
+                                              pf_sample_set_t* set,double omega_odom[]);
   /*******Laser_Model*******/
   // Determine the probability for the given pose - more probablistic model 
   private: static double LikelihoodFieldModelProb(AMCLLaserData *data, AMCLLaserData *data_LLL,
-					     pf_sample_set_t* set);
+					     pf_sample_set_t* set,double omega_odom[]);
 /*****************************************Life_Long_Localization*****************************************/
 /*****************************************Life_Long_Localization_Newlaserscan*****************************************/
   private: void reallocTempData(int max_samples, int max_obs);
